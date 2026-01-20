@@ -137,6 +137,53 @@ function padRightByWidth(text, targetWidth) {
   return `${text}${" ".repeat(targetWidth - currentWidth)}`;
 }
 
+function truncateByWidth(text, maxWidth) {
+  if (!text || maxWidth <= 0) return "";
+  let width = 0;
+  let result = "";
+  for (const char of text) {
+    const charW = charWidth(char);
+    if (width + charW > maxWidth) break;
+    result += char;
+    width += charW;
+  }
+  return result;
+}
+
+function buildTitleBorderLine(width, title) {
+  if (!width || width < 2) return "";
+  const innerWidth = width - 2;
+  if (!title) {
+    return `┌${"─".repeat(innerWidth)}┐`;
+  }
+  const safeTitle = truncateByWidth(title, innerWidth);
+  const remaining = Math.max(0, innerWidth - stringWidth(safeTitle));
+  const leftDashCount = Math.min(1, remaining);
+  const rightDashCount = Math.max(0, remaining - leftDashCount);
+  return `┌${"─".repeat(leftDashCount)}${safeTitle}${"─".repeat(
+    rightDashCount,
+  )}┐`;
+}
+
+function buildHeaderLine(leftText, rightText, totalWidth) {
+  const safeLeft = leftText || "";
+  const safeRight = rightText || "";
+  if (!totalWidth || totalWidth <= 0) return safeLeft;
+  const leftWidth = stringWidth(safeLeft);
+  if (leftWidth >= totalWidth) {
+    return truncateByWidth(safeLeft, totalWidth);
+  }
+  const rightWidth = stringWidth(safeRight);
+  if (leftWidth + 1 + rightWidth <= totalWidth) {
+    const spaces = totalWidth - leftWidth - rightWidth;
+    return `${safeLeft}${" ".repeat(spaces)}${safeRight}`;
+  }
+  const maxRight = Math.max(0, totalWidth - leftWidth - 1);
+  const rightTrunc = truncateByWidth(safeRight, maxRight);
+  const gap = Math.max(1, totalWidth - leftWidth - stringWidth(rightTrunc));
+  return `${safeLeft}${" ".repeat(gap)}${rightTrunc}`;
+}
+
 function wrapText(text, maxWidth) {
   if (maxWidth <= 0) return [text || ""];
   if (text === "") return [" "];
@@ -340,6 +387,34 @@ function defaultExportPath(session) {
   const base =
     session?.id || path.basename(session.path || "session", ".jsonl");
   return path.join(process.cwd(), `${base}.md`);
+}
+
+function TitledPanel({
+  title,
+  width,
+  height,
+  borderColor,
+  children,
+}) {
+  const titleText = title ? ` ${title} ` : "";
+  const topBorder = buildTitleBorderLine(width, titleText);
+
+  return h(
+    Box,
+    { flexDirection: "column", width, height },
+    h(Text, { color: borderColor, bold: true }, topBorder),
+    h(
+      Box,
+      {
+        flexDirection: "column",
+        borderStyle: "single",
+        borderTop: false,
+        borderColor,
+        flexGrow: 1,
+      },
+      children,
+    ),
+  );
 }
 
 function ListView({
@@ -576,8 +651,9 @@ export default function App() {
 
   const paneHeight = useMemo(() => {
     const rows = stdout?.rows || 24;
-    const headerLines = 10;
-    return Math.max(4, rows - headerLines);
+    const headerLines = 6;
+    const footerLines = 1;
+    return Math.max(4, rows - headerLines - footerLines);
   }, [stdout?.rows]);
 
   const baseVisibleCount = useMemo(() => {
@@ -600,6 +676,9 @@ export default function App() {
     const rightPaneWidth = Math.max(20, columns - leftWidth);
     return Math.max(10, rightPaneWidth - 2);
   }, [stdout?.columns, leftWidth]);
+  const rightPaneWidth = useMemo(() => {
+    return rightContentWidth + 2;
+  }, [rightContentWidth]);
 
   const maxLabelWidth = useMemo(() => {
     return Math.max(8, leftContentWidth - 2);
@@ -690,18 +769,6 @@ export default function App() {
   const rightTotalCount = wrappedRows.length;
   const maxRightOffset = Math.max(0, rightTotalCount - rightVisibleCount);
 
-  const leftTotalCount = sessions.length;
-  const leftStartIndex = leftTotalCount
-    ? Math.min(leftTotalCount, scrollOffset + 1)
-    : 0;
-  const leftEndIndex = Math.min(leftTotalCount, scrollOffset + baseVisibleCount);
-  const rightStartIndex = rightTotalCount
-    ? Math.min(rightTotalCount, rightScrollOffset + 1)
-    : 0;
-  const rightEndIndex = Math.min(
-    rightTotalCount,
-    rightScrollOffset + rightVisibleCount,
-  );
 
   useEffect(() => {
     setRightScrollOffset((prev) => Math.min(prev, maxRightOffset));
@@ -852,6 +919,15 @@ export default function App() {
   const statusDetailLine = statusDetail || "";
   const exportLine = exporting ? `Export path: ${exportPath}` : "";
   const exportHintLine = exporting ? "Enter to save, Esc to cancel" : "";
+  const headerLine = buildHeaderLine(
+    "Codex Transcriber (q: quit)",
+    `Directory: ${DEFAULT_SESSIONS_DIR}`,
+    stdout?.columns || 120,
+  );
+  const footerLine =
+    focus === "left"
+      ? "j/k, g/G, f/b to move"
+      : "j/k, g/G, f/b to scroll | m for Markdown | e for export";
 
   return h(
     React.Fragment,
@@ -859,27 +935,7 @@ export default function App() {
     h(
       Box,
       { flexDirection: "column" },
-      h(Text, { wrap: "truncate" }, "Codex Transcriber"),
-      h(
-        Text,
-        { wrap: "truncate" },
-        `Directory: ${DEFAULT_SESSIONS_DIR}`,
-      ),
-      h(
-        Text,
-        { wrap: "truncate" },
-        `Focus: ${focus === "left" ? "Left" : "Right"} | Tab / 1 / 2 to switch | q to quit`,
-      ),
-      h(
-        Text,
-        { wrap: "truncate" },
-        `Left: ${leftStartIndex}-${leftEndIndex} / ${leftTotalCount} | j/k, g/G, f/b`,
-      ),
-      h(
-        Text,
-        { wrap: "truncate" },
-        `Right: ${rightStartIndex}-${rightEndIndex} / ${rightTotalCount} | j/k, g/G, f/b | m for Markdown | e for export`,
-      ),
+      h(Text, { wrap: "truncate" }, headerLine),
       h(Text, { wrap: "truncate" }, statusLine),
       h(Text, { wrap: "truncate" }, statusDetailLine),
       h(Text, { wrap: "truncate" }, exportLine),
@@ -890,10 +946,9 @@ export default function App() {
       Box,
       { flexDirection: "row" },
       h(
-        Box,
+        TitledPanel,
         {
-          flexDirection: "column",
-          borderStyle: "single",
+          title: "[1] Sessions",
           width: leftWidth,
           height: paneHeight,
           borderColor: focus === "left" ? "green" : undefined,
@@ -909,11 +964,10 @@ export default function App() {
         }),
       ),
       h(
-        Box,
+        TitledPanel,
         {
-          flexDirection: "column",
-          borderStyle: "single",
-          flexGrow: 1,
+          title: "[2] Conversation",
+          width: rightPaneWidth,
           height: paneHeight,
           borderColor: focus === "right" ? "green" : undefined,
         },
@@ -928,5 +982,6 @@ export default function App() {
         }),
       ),
     ),
+    h(Text, { wrap: "truncate" }, footerLine),
   );
 }
