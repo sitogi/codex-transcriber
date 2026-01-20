@@ -68,6 +68,19 @@ function parseTimestampFromFilename(filePath) {
   return date.toISOString().replace("T", " ").replace("Z", "Z");
 }
 
+function parseRepoName(repositoryUrl) {
+  if (!repositoryUrl) return "";
+  try {
+    const parsed = new URL(repositoryUrl);
+    const pathname = parsed.pathname.replace(/\.git$/u, "");
+    const parts = pathname.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "";
+  } catch {
+    const trimmed = repositoryUrl.replace(/\.git$/u, "");
+    return path.basename(trimmed);
+  }
+}
+
 async function readSessionMeta(filePath) {
   try {
     const line = await readFirstLine(filePath);
@@ -394,11 +407,34 @@ function ConversationView({
   rows,
   scrollOffset,
   visibleCount,
+  headerLines,
 }) {
+  const renderHeaderLine = (line, index) => {
+    const isMeta =
+      line.startsWith("Repository:") || line.startsWith("Branch:");
+    return h(
+      Text,
+      {
+        key: `header-${index}`,
+        wrap: "truncate",
+        color: isMeta ? "yellow" : undefined,
+        bold: isMeta,
+      },
+      line,
+    );
+  };
+
   if (loading) {
     return h(
       Box,
       { flexDirection: "column" },
+      headerLines?.length
+        ? h(
+            Box,
+            { flexDirection: "column" },
+            headerLines.map((line, index) => renderHeaderLine(line, index)),
+          )
+        : null,
       h(Text, null, "読み込み 中"),
     );
   }
@@ -407,6 +443,13 @@ function ConversationView({
     return h(
       Box,
       { flexDirection: "column" },
+      headerLines?.length
+        ? h(
+            Box,
+            { flexDirection: "column" },
+            headerLines.map((line, index) => renderHeaderLine(line, index)),
+          )
+        : null,
       h(Text, null, "読み込み エラー"),
       h(Text, null, error),
     );
@@ -414,15 +457,24 @@ function ConversationView({
 
   const visibleRows = rows.slice(scrollOffset, scrollOffset + visibleCount);
 
+  const headerBlock = headerLines?.length
+    ? h(
+        Box,
+        { flexDirection: "column" },
+        headerLines.map((line, index) => renderHeaderLine(line, index)),
+      )
+    : null;
+
   return h(
     Box,
     { flexDirection: "column" },
+    headerBlock,
     !session
       ? h(Text, { marginTop: 1 }, "セッション を 選択")
       : !rows.length
         ? h(Text, { marginTop: 1 }, "会話 が ありません")
-      : h(
-          Box,
+        : h(
+            Box,
           { flexDirection: "column" },
           visibleRows.map((row, index) => {
             const isBoxRow = row.type?.startsWith("box-");
@@ -430,11 +482,11 @@ function ConversationView({
               isBoxRow && row.role
                 ? row.role === "user"
                   ? "cyan"
-                  : "green"
+                  : "blueBright"
                 : row.type === "label"
                   ? row.role === "user"
                     ? "cyan"
-                    : "green"
+                    : "blueBright"
                   : undefined;
             return h(Text, { key: index, color }, row.text);
           }),
@@ -483,13 +535,14 @@ export default function App() {
             const id = meta?.payload?.id || null;
             const tsRaw = meta?.payload?.timestamp || meta?.timestamp;
             const ts = tsRaw ? Date.parse(tsRaw) : 0;
-            return {
-              id,
-              label,
-              path: filePath,
-              sortKey: Number.isNaN(ts) ? 0 : ts,
-            };
-          }),
+    return {
+      id,
+      label,
+      path: filePath,
+      sortKey: Number.isNaN(ts) ? 0 : ts,
+      git: meta?.payload?.git || meta?.git || null,
+    };
+  }),
         );
         sessionsData.sort((a, b) => {
           if (a.sortKey && b.sortKey && a.sortKey !== b.sortKey) {
@@ -527,9 +580,10 @@ export default function App() {
     return Math.max(4, rows - headerLines);
   }, [stdout?.rows]);
 
-  const visibleCount = useMemo(() => {
+  const baseVisibleCount = useMemo(() => {
     return Math.max(1, paneHeight - 2);
   }, [paneHeight]);
+  const leftVisibleCount = baseVisibleCount;
 
   const leftWidth = useMemo(() => {
     const columns = stdout?.columns || 120;
@@ -551,20 +605,38 @@ export default function App() {
     return Math.max(8, leftContentWidth - 2);
   }, [leftContentWidth]);
 
+  const rightHeaderLines = useMemo(() => {
+    if (!selectedSession) return [];
+    const repoName = parseRepoName(
+      selectedSession.git?.repository_url ||
+        selectedSession.git?.repositoryUrl ||
+        "",
+    );
+    const branchName = selectedSession.git?.branch || "";
+    const repoLabel = repoName || "unknown";
+    const branchLabel = branchName || "unknown";
+    return [`Repository: ${repoLabel}`, `Branch: ${branchLabel}`, " "];
+  }, [selectedSession]);
+
+  const rightHeaderHeight = rightHeaderLines.length;
+  const rightVisibleCount = useMemo(() => {
+    return Math.max(1, baseVisibleCount - rightHeaderHeight);
+  }, [baseVisibleCount, rightHeaderHeight]);
+
   useEffect(() => {
     if (!sessions.length) return;
-    const maxOffset = Math.max(0, sessions.length - visibleCount);
+    const maxOffset = Math.max(0, sessions.length - baseVisibleCount);
     setScrollOffset((prev) => {
       let next = prev;
       if (selectedIndex < next) next = selectedIndex;
-      if (selectedIndex >= next + visibleCount) {
-        next = selectedIndex - visibleCount + 1;
+      if (selectedIndex >= next + baseVisibleCount) {
+        next = selectedIndex - baseVisibleCount + 1;
       }
       if (next > maxOffset) next = maxOffset;
       if (next < 0) next = 0;
       return next;
     });
-  }, [selectedIndex, sessions.length, visibleCount]);
+  }, [selectedIndex, sessions.length, baseVisibleCount]);
 
   useEffect(() => {
     if (!selectedSession) {
@@ -616,17 +688,20 @@ export default function App() {
     [conversationRows, rightContentWidth],
   );
   const rightTotalCount = wrappedRows.length;
-  const maxRightOffset = Math.max(0, rightTotalCount - visibleCount);
+  const maxRightOffset = Math.max(0, rightTotalCount - rightVisibleCount);
 
   const leftTotalCount = sessions.length;
   const leftStartIndex = leftTotalCount
     ? Math.min(leftTotalCount, scrollOffset + 1)
     : 0;
-  const leftEndIndex = Math.min(leftTotalCount, scrollOffset + visibleCount);
+  const leftEndIndex = Math.min(leftTotalCount, scrollOffset + baseVisibleCount);
   const rightStartIndex = rightTotalCount
     ? Math.min(rightTotalCount, rightScrollOffset + 1)
     : 0;
-  const rightEndIndex = Math.min(rightTotalCount, rightScrollOffset + visibleCount);
+  const rightEndIndex = Math.min(
+    rightTotalCount,
+    rightScrollOffset + rightVisibleCount,
+  );
 
   useEffect(() => {
     setRightScrollOffset((prev) => Math.min(prev, maxRightOffset));
@@ -634,15 +709,15 @@ export default function App() {
 
   useEffect(() => {
     setRightScrollOffset(0);
-  }, [selectedSession, viewMode, rightContentWidth]);
+  }, [selectedSession, viewMode, rightContentWidth, rightHeaderHeight]);
 
   const handleExportSubmit = async () => {
     try {
       await fs.promises.writeFile(exportPath, markdown, "utf8");
-      setStatus("export 完了");
+      setStatus("Export complete");
       setStatusDetail(exportPath);
     } catch (error) {
-      setStatus("export 失敗");
+      setStatus("Export failed");
       setStatusDetail(error?.message || String(error));
     } finally {
       setExporting(false);
@@ -653,7 +728,7 @@ export default function App() {
     if (exporting) {
       if (key.escape) {
         setExporting(false);
-        setStatus("export キャンセル");
+        setStatus("Export cancelled");
         setStatusDetail("");
         return;
       }
@@ -675,6 +750,14 @@ export default function App() {
       setFocus((prev) => (prev === "left" ? "right" : "left"));
       return;
     }
+    if (input === "1") {
+      setFocus("left");
+      return;
+    }
+    if (input === "2") {
+      setFocus("right");
+      return;
+    }
 
     if (input === "q") {
       exit();
@@ -688,6 +771,16 @@ export default function App() {
       }
       if (key.downArrow || input === "j") {
         setSelectedIndex((prev) => Math.min(sessions.length - 1, prev + 1));
+        return;
+      }
+      if (input === "b") {
+        setSelectedIndex((prev) => Math.max(0, prev - leftVisibleCount));
+        return;
+      }
+      if (input === "f") {
+        setSelectedIndex((prev) =>
+          Math.min(sessions.length - 1, prev + leftVisibleCount),
+        );
         return;
       }
       if (input === "g") {
@@ -711,25 +804,25 @@ export default function App() {
         );
         return;
       }
-      if (key.pageUp) {
-        setRightScrollOffset((prev) => Math.max(0, prev - visibleCount));
+      if (input === "b") {
+        setRightScrollOffset((prev) => Math.max(0, prev - rightVisibleCount));
         return;
       }
-      if (key.pageDown) {
+      if (input === "f") {
         setRightScrollOffset((prev) =>
-          Math.min(maxRightOffset, prev + visibleCount),
+          Math.min(maxRightOffset, prev + rightVisibleCount),
         );
         return;
       }
       if (key.ctrl && input === "u") {
         setRightScrollOffset((prev) =>
-          Math.max(0, prev - Math.ceil(visibleCount / 2)),
+          Math.max(0, prev - Math.ceil(rightVisibleCount / 2)),
         );
         return;
       }
       if (key.ctrl && input === "d") {
         setRightScrollOffset((prev) =>
-          Math.min(maxRightOffset, prev + Math.ceil(visibleCount / 2)),
+          Math.min(maxRightOffset, prev + Math.ceil(rightVisibleCount / 2)),
         );
         return;
       }
@@ -757,8 +850,8 @@ export default function App() {
 
   const statusLine = status || "";
   const statusDetailLine = statusDetail || "";
-  const exportLine = exporting ? `出力 先 パス: ${exportPath}` : "";
-  const exportHintLine = exporting ? "Enter で 保存, Esc で キャンセル" : "";
+  const exportLine = exporting ? `Export path: ${exportPath}` : "";
+  const exportHintLine = exporting ? "Enter to save, Esc to cancel" : "";
 
   return h(
     React.Fragment,
@@ -770,22 +863,22 @@ export default function App() {
       h(
         Text,
         { wrap: "truncate" },
-        `ディレクトリ: ${DEFAULT_SESSIONS_DIR}`,
+        `Directory: ${DEFAULT_SESSIONS_DIR}`,
       ),
       h(
         Text,
         { wrap: "truncate" },
-        `フォーカス: ${focus === "left" ? "左" : "右"} | Tab で 切替 | q で 終了`,
+        `Focus: ${focus === "left" ? "Left" : "Right"} | Tab / 1 / 2 to switch | q to quit`,
       ),
       h(
         Text,
         { wrap: "truncate" },
-        `左: ${leftStartIndex}-${leftEndIndex} / ${leftTotalCount} | j/k, g/G`,
+        `Left: ${leftStartIndex}-${leftEndIndex} / ${leftTotalCount} | j/k, g/G, f/b`,
       ),
       h(
         Text,
         { wrap: "truncate" },
-        `右: ${rightStartIndex}-${rightEndIndex} / ${rightTotalCount} | j/k, g/G, PgUp/PgDn | m で Markdown | e で export`,
+        `Right: ${rightStartIndex}-${rightEndIndex} / ${rightTotalCount} | j/k, g/G, f/b | m for Markdown | e for export`,
       ),
       h(Text, { wrap: "truncate" }, statusLine),
       h(Text, { wrap: "truncate" }, statusDetailLine),
@@ -803,7 +896,7 @@ export default function App() {
           borderStyle: "single",
           width: leftWidth,
           height: paneHeight,
-          borderColor: focus === "left" ? "cyan" : undefined,
+          borderColor: focus === "left" ? "green" : undefined,
         },
         h(ListView, {
           sessions,
@@ -811,7 +904,7 @@ export default function App() {
           error: sessionsError,
           selectedIndex,
           scrollOffset,
-          visibleCount,
+          visibleCount: leftVisibleCount,
           maxLabelWidth,
         }),
       ),
@@ -830,7 +923,8 @@ export default function App() {
           error: conversationError,
           rows: wrappedRows,
           scrollOffset: rightScrollOffset,
-          visibleCount,
+          visibleCount: rightVisibleCount,
+          headerLines: rightHeaderLines,
         }),
       ),
     ),
