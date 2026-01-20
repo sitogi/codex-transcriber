@@ -110,6 +110,20 @@ function charWidth(char) {
   return 2;
 }
 
+function stringWidth(text) {
+  let width = 0;
+  for (const char of text || "") {
+    width += charWidth(char);
+  }
+  return width;
+}
+
+function padRightByWidth(text, targetWidth) {
+  const currentWidth = stringWidth(text);
+  if (currentWidth >= targetWidth) return text;
+  return `${text}${" ".repeat(targetWidth - currentWidth)}`;
+}
+
 function wrapText(text, maxWidth) {
   if (maxWidth <= 0) return [text || ""];
   if (text === "") return [" "];
@@ -261,26 +275,41 @@ function buildMarkdown(entries) {
   return `${blocks.join("\n\n")}\n`;
 }
 
-function buildPrettyRows(entries) {
+function buildBoxRows(entries, maxWidth) {
   const rows = [];
+  const innerWidth = Math.max(1, maxWidth - 4);
+  const borderInnerWidth = innerWidth + 2;
+  const border = `+${"-".repeat(borderInnerWidth)}+`;
+
   for (const entry of entries) {
     const label = entry.role === "user" ? "User" : "Assistant";
-    rows.push({ type: "label", role: entry.role, text: label });
-    const lines = (entry.text || "").split("\n");
-    if (lines.length === 0) {
-      rows.push({ type: "text", role: entry.role, text: " " });
-    } else {
-      for (const line of lines) {
+    let labelTag = ` ${label} `;
+    if (stringWidth(labelTag) > borderInnerWidth) {
+      labelTag = labelTag.slice(0, Math.max(0, borderInnerWidth));
+    }
+    const remaining = Math.max(0, borderInnerWidth - stringWidth(labelTag));
+    const topBorder = `+${labelTag}${"-".repeat(remaining)}+`;
+    rows.push({ type: "box-border", role: entry.role, text: topBorder });
+
+    const rawLines = (entry.text || "").split("\n");
+    const bodyLines = rawLines.length ? rawLines : [""];
+    for (const rawLine of bodyLines) {
+      const wrapped = wrapText(rawLine, innerWidth);
+      for (const line of wrapped) {
+        const padded = padRightByWidth(line, innerWidth);
         rows.push({
-          type: "text",
+          type: "box-text",
           role: entry.role,
-          text: line === "" ? " " : line,
+          text: `| ${padded} |`,
         });
       }
     }
+
+    rows.push({ type: "box-border", role: entry.role, text: border });
     rows.push({ type: "spacer", text: " " });
     rows.push({ type: "spacer", text: " " });
   }
+
   while (rows.length && rows[rows.length - 1].type === "spacer") {
     rows.pop();
   }
@@ -396,11 +425,18 @@ function ConversationView({
           Box,
           { flexDirection: "column" },
           visibleRows.map((row, index) => {
-            if (row.type === "label") {
-              const color = row.role === "user" ? "cyan" : "green";
-              return h(Text, { key: index, color }, row.text);
-            }
-            return h(Text, { key: index }, row.text);
+            const isBoxRow = row.type?.startsWith("box-");
+            const color =
+              isBoxRow && row.role
+                ? row.role === "user"
+                  ? "cyan"
+                  : "green"
+                : row.type === "label"
+                  ? row.role === "user"
+                    ? "cyan"
+                    : "green"
+                  : undefined;
+            return h(Text, { key: index, color }, row.text);
           }),
         ),
   );
@@ -567,8 +603,8 @@ export default function App() {
   );
 
   const prettyRows = useMemo(
-    () => buildPrettyRows(conversation),
-    [conversation],
+    () => buildBoxRows(conversation, rightContentWidth),
+    [conversation, rightContentWidth],
   );
   const markdownRows = useMemo(
     () => buildMarkdownRows(markdown),
