@@ -1,0 +1,19 @@
+{
+  "name": "codex-transcriber",
+  "version": "0.1.0",
+  "description": "Codex セッション の 会話 を TUI で 抽出 する ツール",
+  "type": "module",
+  "bin": {
+    "codex-transcriber": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node ./src/cli.js"
+  },
+  "dependencies": {
+    "ink": "^5.0.0",
+    "react": "^18.2.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
