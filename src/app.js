@@ -430,7 +430,7 @@ function ListView({
     return h(
       Box,
       { flexDirection: "column" },
-      h(Text, null, "読み込み 中"),
+      h(Text, null, "Loading..."),
     );
   }
 
@@ -438,7 +438,7 @@ function ListView({
     return h(
       Box,
       { flexDirection: "column" },
-      h(Text, null, "読み込み エラー"),
+      h(Text, null, "Load error"),
       h(Text, null, error),
     );
   }
@@ -447,7 +447,7 @@ function ListView({
     return h(
       Box,
       { flexDirection: "column" },
-      h(Text, null, "セッション が 見つかりません"),
+      h(Text, null, "No sessions found"),
     );
   }
 
@@ -510,7 +510,7 @@ function ConversationView({
             headerLines.map((line, index) => renderHeaderLine(line, index)),
           )
         : null,
-      h(Text, null, "読み込み 中"),
+      h(Text, null, "Loading..."),
     );
   }
 
@@ -525,7 +525,7 @@ function ConversationView({
             headerLines.map((line, index) => renderHeaderLine(line, index)),
           )
         : null,
-      h(Text, null, "読み込み エラー"),
+      h(Text, null, "Load error"),
       h(Text, null, error),
     );
   }
@@ -545,9 +545,9 @@ function ConversationView({
     { flexDirection: "column" },
     headerBlock,
     !session
-      ? h(Text, { marginTop: 1 }, "セッション を 選択")
+      ? h(Text, { marginTop: 1 }, "Select a session")
       : !rows.length
-        ? h(Text, { marginTop: 1 }, "会話 が ありません")
+        ? h(Text, { marginTop: 1 }, "No conversation found")
         : h(
             Box,
           { flexDirection: "column" },
@@ -920,14 +920,14 @@ export default function App() {
   const exportLine = exporting ? `Export path: ${exportPath}` : "";
   const exportHintLine = exporting ? "Enter to save, Esc to cancel" : "";
   const headerLine = buildHeaderLine(
-    "Codex Transcriber (q: quit)",
+    "Codex Transcriber",
     `Directory: ${DEFAULT_SESSIONS_DIR}`,
     stdout?.columns || 120,
   );
   const footerLine =
     focus === "left"
-      ? "j/k, g/G, f/b to move"
-      : "j/k, g/G, f/b to scroll | m for Markdown | e for export";
+      ? "q: quit | j/k, g/G, f/b to move"
+      : "q: quit | j/k, g/G, f/b to scroll | m for Markdown | e for export";
 
   return h(
     React.Fragment,
