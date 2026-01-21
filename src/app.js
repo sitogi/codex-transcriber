@@ -940,8 +940,8 @@ export default function App() {
   );
   const footerLine =
     focus === "left"
-      ? "q: quit | j/k, g/G, f/b to move"
-      : "q: quit | j/k, g/G, f/b to scroll | m for Markdown | e for export";
+      ? "Quit: q | Move: j/k, g/G, f/b"
+      : "Quit: q | Scroll: j/k, g/G, f/b | Markdown: m | Export: e";
 
   return h(
     React.Fragment,
