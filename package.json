@@ -4,8 +4,13 @@
   "description": "Codex セッション の 会話 を TUI で 抽出 する ツール",
   "type": "module",
   "bin": {
-    "codex-transcriber": "./src/cli.js"
+    "codex-transcriber": "src/cli.js"
   },
+  "files": [
+    "src",
+    "README.md",
+    "README.ja.md"
+  ],
   "scripts": {
     "start": "node ./src/cli.js"
   },
