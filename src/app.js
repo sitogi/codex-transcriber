@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -406,6 +407,10 @@ function defaultExportPath(session) {
   return path.join(process.cwd(), `${base}.md`);
 }
 
+function sessionResumeId(session) {
+  return session?.id || null;
+}
+
 function TitledPanel({
   title,
   width,
@@ -608,6 +613,23 @@ export default function App() {
   const [statusDetail, setStatusDetail] = useState("");
   const [rightScrollOffset, setRightScrollOffset] = useState(0);
   const [focus, setFocus] = useState("left");
+
+  const launchCodexResume = (session) => {
+    const resumeId = sessionResumeId(session);
+    if (!resumeId) {
+      setStatus("session id が見つかりません");
+      setStatusDetail("");
+      return;
+    }
+    const child = spawn("codex", ["resume", resumeId], { stdio: "inherit" });
+    child.on("error", (error) => {
+      setStatus("codex 起動に失敗しました");
+      setStatusDetail(error?.message || String(error));
+    });
+    child.on("spawn", () => {
+      exit();
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -879,6 +901,11 @@ export default function App() {
         setSelectedIndex(Math.max(0, sessions.length - 1));
         return;
       }
+      if (input === "c") {
+        const resumeSession = selectedSession || sessions[selectedIndex] || null;
+        launchCodexResume(resumeSession);
+        return;
+      }
     }
 
     if (focus === "right") {
@@ -947,7 +974,7 @@ export default function App() {
   );
   const footerLine =
     focus === "left"
-      ? "Quit: q | Move: j/k, g/G, f/b"
+      ? "Quit: q | Move: j/k, g/G, f/b | Codex: c"
       : "Quit: q | Scroll: j/k, g/G, f/b | Markdown: m | Export: e";
 
   return h(

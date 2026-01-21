@@ -33,6 +33,7 @@ node src/cli.js
 - Quit は `q`
 - フォーカス切り替えは `Tab` で `1` は左 `2` は右
 - 左ペインの移動は `j` `k` `g` `G` `f` `b` `ArrowUp` `ArrowDown`
+- 左ペインのセッションを codex で再開するには `c`
 - 右ペインのスクロールは `j` `k` `g` `G` `f` `b` `ArrowUp` `ArrowDown` `Ctrl+u` `Ctrl+d`
 - 表示切り替えは `m` で Markdown と Pretty を切り替え
 - 書き出しは `e` で開始し `Enter` で保存 `Esc` でキャンセル

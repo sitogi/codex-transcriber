@@ -33,6 +33,7 @@ node src/cli.js
 - Quit: `q`
 - Switch focus: `Tab` (left), `1` (left), `2` (right)
 - Left pane move: `j` `k` `g` `G` `f` `b` `ArrowUp` `ArrowDown`
+- Resume in Codex: `c` (left pane)
 - Right pane scroll: `j` `k` `g` `G` `f` `b` `ArrowUp` `ArrowDown` `Ctrl+u` `Ctrl+d`
 - Toggle view: `m` (Markdown or Pretty)
 - Export: `e` to start, `Enter` to save, `Esc` to cancel
