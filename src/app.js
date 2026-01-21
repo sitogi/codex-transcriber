@@ -54,7 +54,7 @@ async function readFirstLine(filePath) {
   return "";
 }
 
-function parseTimestampFromFilename(filePath) {
+function parseTimestampMsFromFilename(filePath) {
   const name = path.basename(filePath);
   const match = name.match(
     /rollout-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/u,
@@ -65,7 +65,13 @@ function parseTimestampFromFilename(filePath) {
   const iso = `${datePart}T${timePart}`;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().replace("T", " ").replace("Z", "Z");
+  return date.getTime();
+}
+
+function parseTimestampFromFilename(filePath) {
+  const timestampMs = parseTimestampMsFromFilename(filePath);
+  if (!timestampMs) return null;
+  return new Date(timestampMs).toISOString().replace("T", " ").replace("Z", "Z");
 }
 
 function parseRepoName(repositoryUrl) {
@@ -609,20 +615,28 @@ export default function App() {
             );
             const id = meta?.payload?.id || null;
             const tsRaw = meta?.payload?.timestamp || meta?.timestamp;
-            const ts = tsRaw ? Date.parse(tsRaw) : 0;
+            const metaTs = tsRaw ? Date.parse(tsRaw) : NaN;
+            let mtimeMs = 0;
+            try {
+              const stat = await fs.promises.stat(filePath);
+              if (Number.isFinite(stat?.mtimeMs)) {
+                mtimeMs = stat.mtimeMs;
+              }
+            } catch {}
+            const filenameMs = parseTimestampMsFromFilename(filePath) || 0;
+            const metaMs = Number.isNaN(metaTs) ? 0 : metaTs;
+            const sortKey = mtimeMs || metaMs || filenameMs || 0;
     return {
       id,
       label,
       path: filePath,
-      sortKey: Number.isNaN(ts) ? 0 : ts,
+      sortKey,
       git: meta?.payload?.git || meta?.git || null,
     };
   }),
         );
         sessionsData.sort((a, b) => {
-          if (a.sortKey && b.sortKey && a.sortKey !== b.sortKey) {
-            return b.sortKey - a.sortKey;
-          }
+          if (a.sortKey !== b.sortKey) return b.sortKey - a.sortKey;
           return a.label.localeCompare(b.label);
         });
         if (!cancelled) {
