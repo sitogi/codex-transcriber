@@ -68,10 +68,21 @@ function parseTimestampMsFromFilename(filePath) {
   return date.getTime();
 }
 
+function formatLocalTimestamp(date) {
+  const pad2 = (value) => String(value).padStart(2, "0");
+  const year = date.getFullYear();
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+  const hours = pad2(date.getHours());
+  const minutes = pad2(date.getMinutes());
+  const seconds = pad2(date.getSeconds());
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
 function parseTimestampFromFilename(filePath) {
   const timestampMs = parseTimestampMsFromFilename(filePath);
   if (!timestampMs) return null;
-  return new Date(timestampMs).toISOString().replace("T", " ").replace("Z", "Z");
+  return formatLocalTimestamp(new Date(timestampMs));
 }
 
 function parseRepoName(repositoryUrl) {
@@ -105,7 +116,7 @@ function formatTimestamp(timestamp) {
   if (!timestamp) return null;
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().replace("T", " ").replace("Z", "Z");
+  return formatLocalTimestamp(date);
 }
 
 function buildSessionLabel(meta, filePath, baseDir) {
@@ -677,8 +688,8 @@ export default function App() {
 
   const leftWidth = useMemo(() => {
     const columns = stdout?.columns || 120;
-    const computed = Math.floor(columns * 0.2);
-    return Math.min(32, Math.max(18, computed));
+    const computed = Math.floor(columns * 0.17);
+    return Math.min(28, Math.max(17, computed));
   }, [stdout?.columns]);
 
   const leftContentWidth = useMemo(() => {
