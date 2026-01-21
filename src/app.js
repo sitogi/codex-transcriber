@@ -686,11 +686,7 @@ export default function App() {
   }, [paneHeight]);
   const leftVisibleCount = baseVisibleCount;
 
-  const leftWidth = useMemo(() => {
-    const columns = stdout?.columns || 120;
-    const computed = Math.floor(columns * 0.17);
-    return Math.min(28, Math.max(17, computed));
-  }, [stdout?.columns]);
+  const leftWidth = useMemo(() => 25, []);
 
   const leftContentWidth = useMemo(() => {
     return Math.max(10, leftWidth - 2);
