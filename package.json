@@ -1,6 +1,6 @@
 {
   "name": "codex-transcriber",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Codex セッション の 会話 を TUI で 抽出 する ツール",
   "type": "module",
   "bin": {
