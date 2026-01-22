@@ -401,6 +401,76 @@ function buildMarkdownRows(markdown) {
     .map((line) => ({ type: "text", text: line === "" ? " " : line }));
 }
 
+function collectVisibleLines(headerLines, rows, scrollOffset, visibleCount) {
+  const lines = [];
+  if (Array.isArray(headerLines)) {
+    for (const line of headerLines) {
+      lines.push(line ?? "");
+    }
+  }
+  if (Array.isArray(rows)) {
+    const visibleRows = rows.slice(scrollOffset, scrollOffset + visibleCount);
+    for (const row of visibleRows) {
+      lines.push(row?.text ?? "");
+    }
+  }
+  return lines;
+}
+
+function writeClipboardWithCommand(command, args, text, options = {}) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+    const child = spawn(command, args, {
+      stdio: ["pipe", "ignore", "ignore"],
+      ...options,
+    });
+    child.on("error", () => {
+      finish(reject, new Error(`${command} を実行できませんでした`));
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        finish(resolve);
+        return;
+      }
+      finish(reject, new Error(`${command} の実行に失敗しました`));
+    });
+    if (child.stdin) {
+      child.stdin.on("error", () => {});
+      child.stdin.end(text, "utf8");
+    }
+  });
+}
+
+async function writeToClipboard(text) {
+  const platform = process.platform;
+  if (platform === "darwin") {
+    await writeClipboardWithCommand("pbcopy", [], text);
+    return;
+  }
+  if (platform === "win32") {
+    await writeClipboardWithCommand("clip", [], text, { shell: true });
+    return;
+  }
+  try {
+    await writeClipboardWithCommand(
+      "xclip",
+      ["-selection", "clipboard"],
+      text,
+    );
+    return;
+  } catch {}
+  try {
+    await writeClipboardWithCommand("xsel", ["--clipboard", "--input"], text);
+    return;
+  } catch {}
+  throw new Error("クリップボードにコピーするコマンドが見つかりません");
+}
+
 function defaultExportPath(session) {
   const base =
     session?.id || path.basename(session.path || "session", ".jsonl");
@@ -834,6 +904,29 @@ export default function App() {
     }
   };
 
+  const handleCopyToClipboard = async () => {
+    const lines = collectVisibleLines(
+      rightHeaderLines,
+      wrappedRows,
+      rightScrollOffset,
+      rightVisibleCount,
+    );
+    const text = lines.join("\n");
+    if (!text.trim()) {
+      setStatus("コピーする内容がありません");
+      setStatusDetail("");
+      return;
+    }
+    try {
+      await writeToClipboard(text);
+      setStatus("クリップボードにコピーしました");
+      setStatusDetail(`行数 ${lines.length}`);
+    } catch (error) {
+      setStatus("クリップボードへのコピーに失敗しました");
+      setStatusDetail(error?.message || String(error));
+    }
+  };
+
   useInput((input, key) => {
     if (exporting) {
       if (key.escape) {
@@ -949,6 +1042,10 @@ export default function App() {
         setRightScrollOffset(maxRightOffset);
         return;
       }
+      if (input === "c") {
+        void handleCopyToClipboard();
+        return;
+      }
     }
     if (input === "m") {
       setViewMode((prev) => (prev === "pretty" ? "markdown" : "pretty"));
@@ -975,7 +1072,7 @@ export default function App() {
   const footerLine =
     focus === "left"
       ? "Quit: q | Move: j/k, g/G, f/b | Codex: c"
-      : "Quit: q | Scroll: j/k, g/G, f/b | Markdown: m | Export: e";
+      : "Quit: q | Scroll: j/k, g/G, f/b | Markdown: m | Export: e | Copy to Clipboard: c";
 
   return h(
     React.Fragment,
